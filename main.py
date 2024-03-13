@@ -10,6 +10,10 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import resample
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
@@ -29,8 +33,6 @@ class DataProcess:
         self.video_id=video_id
     
     def video_comments(self,comments=[]):
-                # empty list for storing reply
-        replies = []
         # creating youtube resource object
         youtube = build('youtube', 'v3',
                 developerKey=api_key)
@@ -44,22 +46,19 @@ class DataProcess:
                 for item in video_response['items']:
                     comment = item['snippet']['topLevelComment']['snippet']['textDisplay']                               
                     replycount = item['snippet']['totalReplyCount']  
+                    '''
                     if replycount > 0:
-                        
                         for reply in item['replies']['comments']:
-                            
                             reply_text = reply['snippet']['textDisplay']
-                            
-                            
                             replies.append(reply_text)
-
+                    '''
                     comments.append(comment)
-                    comments += replies
-                    # Empty reply list...
+                    #comments += replies
+                    
                     replies = []
-                    if len(comments) > 4000:
+                    if len(comments) > 10000:
                         return comments
-                # Again repeat...
+               
                 if 'nextPageToken' in video_response:
                     video_response = youtube.commentThreads().list(
                         part='snippet,replies',
@@ -82,6 +81,7 @@ df["Neutral"] = [sentiments.polarity_scores(i)["neu"] for i in df["comments"]]
 df['Compound'] = [sentiments.polarity_scores(i)["compound"] for i in df["comments"]]
 score = df["Compound"].values
 sentiment = []
+
 for i in score:
     if i >= 0.05 :
         sentiment.append('Positive')
@@ -101,7 +101,6 @@ snowball_stemer = SnowballStemmer(language="english")
 lzr = WordNetLemmatizer()
 
 def text_processing(text):   
-    # convert text into lowercase
     text = text.lower()
     # remove new line characters in text
     text = re.sub(r'\n',' ', text)
@@ -134,3 +133,38 @@ processed_data = {
 processed_data = pd.DataFrame(processed_data)
 
 print(processed_data['Sentiment'].value_counts())
+
+df_neutral = processed_data[(processed_data['Sentiment']==1)] 
+df_negative = processed_data[(processed_data['Sentiment']==0)]
+df_positive = processed_data[(processed_data['Sentiment']==2)]
+
+# upsample minority classes
+df_negative_upsampled = resample(df_negative, 
+                                 replace=True,    
+                                 n_samples= 4000, 
+                                 random_state=42)  
+
+df_neutral_upsampled = resample(df_neutral, 
+                                 replace=True,    
+                                 n_samples= 4000, 
+                                 random_state=42)  
+
+# Concatenate the upsampled dataframes with the neutral dataframe
+final_data = pd.concat([df_negative_upsampled,df_neutral_upsampled,df_positive])
+print(final_data['Sentiment'].value_counts())
+
+corpus = []
+for sentence in final_data['Sentence']:
+    corpus.append(sentence)
+corpus[0:5]
+
+cv = CountVectorizer(max_features=1500)
+X = cv.fit_transform(corpus).toarray()
+y = final_data.iloc[:, -1].values
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+classifier = GaussianNB()
+classifier.fit(X_train, y_train)
+y_pred = classifier.predict(X_test)
+
+nb_score = accuracy_score(y_test, y_pred)
