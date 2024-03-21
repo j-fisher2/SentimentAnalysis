@@ -1,7 +1,3 @@
-Here's a README file for your code:
-
----
-
 # YouTube Video Comments Sentiment Analysis
 
 This project aims to perform sentiment analysis on comments from a YouTube video using Natural Language Processing (NLP) techniques. The sentiment analysis helps in understanding the overall sentiment expressed in the comments, whether positive, negative, or neutral.
